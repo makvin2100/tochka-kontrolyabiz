@@ -139,17 +139,18 @@
       </div>
       <div class="form-card reveal">
         <h3>Обсудить мой бизнес</h3><p>Заполните форму — поля со звёздочкой обязательны.</p>
-        <form id="leadForm">
+        <form id="leadForm" action="https://formspree.io/f/xoejkrlj" method="POST">
+          <input type="hidden" name="_subject" value="Новая заявка с сайта «Точка контроля»">
           <div class="form-grid">
             <div class="field"><label for="name">Имя *</label><input id="name" name="name" autocomplete="name" placeholder="Как к вам обращаться" required></div>
             <div class="field"><label for="company">Компания</label><input id="company" name="company" autocomplete="organization" placeholder="Название компании"></div>
             <div class="field full"><label for="contact">Телефон или мессенджер *</label><input id="contact" name="contact" autocomplete="tel" placeholder="+7 ... или @username" required></div>
             <div class="field full"><label for="task">Кратко о задаче</label><textarea id="task" name="task" placeholder="Что сейчас важно изменить или прояснить?"></textarea></div>
           </div>
-          <label class="consent"><input type="checkbox" id="consent" required><span>Я согласен(на) на обработку персональных данных в соответствии с <a href="#privacy" id="privacyLink">политикой конфиденциальности</a>. *</span></label>
+          <label class="consent"><input type="checkbox" id="consent" name="consent" value="yes" required><span>Я согласен(на) на обработку персональных данных в соответствии с <a href="#privacy" id="privacyLink">политикой конфиденциальности</a>. *</span></label>
           <button class="btn btn-primary form-submit" type="submit">Подготовить обращение <span class="arrow">↗</span></button>
           <p class="form-status" id="formStatus" role="status" aria-live="polite"></p>
-          <p class="form-disclaimer">Важно: форма пока работает в демонстрационном режиме и не отправляет данные владельцу сайта. Для приёма заявок подключите CRM, почту или backend.</p>
+          <p class="form-disclaimer">После отправки заявка будет передана через Formspree. Перед запуском реального сбора заявок проверьте уведомления и актуализируйте политику конфиденциальности.</p>
         </form>
       </div>
     </div>
@@ -164,7 +165,7 @@
 </footer>
 
 <div class="modal" id="privacyModal" role="dialog" aria-modal="true" aria-labelledby="privacyTitle">
-  <div class="modal-box"><button class="modal-close" id="modalClose" aria-label="Закрыть">×</button><div class="small-label">Юридическая информация</div><h2 id="privacyTitle">Политика конфиденциальности</h2><p><strong>Перед публикацией этот раздел необходимо заменить утверждённым документом.</strong> Владелец сайта должен указать фактические цели и основания обработки персональных данных, состав собираемых данных, сроки хранения, порядок отзыва согласия, сведения об операторе и контакты для обращений.</p><p>Форма на этой демонстрационной версии не передаёт введённые данные на сервер. Не подключайте сбор заявок и не публикуйте сайт с реальным сбором персональных данных, пока политика и форма согласия не будут проверены и настроены с учётом применимого законодательства.</p><button class="btn btn-primary" id="modalDone">Понятно</button></div>
+  <div class="modal-box"><button class="modal-close" id="modalClose" aria-label="Закрыть">×</button><div class="small-label">Юридическая информация</div><h2 id="privacyTitle">Политика конфиденциальности</h2><p><strong>Перед публикацией этот раздел необходимо заменить утверждённым документом.</strong> Владелец сайта должен указать фактические цели и основания обработки персональных данных, состав собираемых данных, сроки хранения, порядок отзыва согласия, сведения об операторе и контакты для обращений.</p><p>Форма передаёт введённые данные сервису Formspree для обработки заявки. Перед активным сбором персональных данных замените этот текст утверждённой политикой, проверьте настройки хранения и обработки данных и убедитесь, что форма согласия соответствует применимому законодательству.</p><button class="btn btn-primary" id="modalDone">Понятно</button></div>
 </div>
 
 <script>
@@ -182,11 +183,41 @@
   document.getElementById('year').textContent = new Date().getFullYear();
 
   const status = document.getElementById('formStatus');
-  document.getElementById('leadForm').addEventListener('submit', (e) => {
+  const leadForm = document.getElementById('leadForm');
+  leadForm.addEventListener('submit', async (e) => {
     e.preventDefault();
     status.classList.remove('error');
-    if (!e.currentTarget.reportValidity()) return;
-    status.textContent = 'Демонстрация: форма заполнена, но заявка не отправлена. Подключите сервис приёма заявок перед публикацией сайта.';
+    if (!leadForm.reportValidity()) return;
+    const submitButton = leadForm.querySelector('button[type="submit"]');
+    const originalButtonText = submitButton.innerHTML;
+    submitButton.disabled = true;
+    submitButton.textContent = 'Отправляем…';
+    status.textContent = '';
+    try {
+      const response = await fetch(leadForm.action, {
+        method: 'POST',
+        body: new FormData(leadForm),
+        headers: { 'Accept': 'application/json' }
+      });
+      if (response.ok) {
+        status.textContent = 'Спасибо! Заявка отправлена. Мы свяжемся с вами.';
+        leadForm.reset();
+      } else {
+        let message = 'Не удалось отправить заявку. Попробуйте ещё раз или свяжитесь с нами другим способом.';
+        try {
+          const data = await response.json();
+          if (data && data.errors && data.errors.length) message = data.errors.map(item => item.message).join(' ');
+        } catch (_) {}
+        status.textContent = message;
+        status.classList.add('error');
+      }
+    } catch (_) {
+      status.textContent = 'Не удалось подключиться к сервису отправки. Проверьте интернет и попробуйте ещё раз.';
+      status.classList.add('error');
+    } finally {
+      submitButton.disabled = false;
+      submitButton.innerHTML = originalButtonText;
+    }
   });
   document.querySelectorAll('[data-service]').forEach(link => link.addEventListener('click', () => {
     const task = document.getElementById('task');
